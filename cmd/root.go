@@ -41,6 +41,7 @@ func Execute() error {
 func init() {
 	rootCmd.AddCommand(ingestCmd)
 	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(alertsCmd)
 	rootCmd.AddCommand(tuiCmd)
 	rootCmd.AddCommand(webCmd)
 }

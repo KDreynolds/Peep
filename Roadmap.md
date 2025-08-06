@@ -52,10 +52,10 @@
 
 ### Phase 2: Intelligence (Weeks 3-4)
 **Week 3: Alerts & Notifications**
-- [ ] SQL-based alert engine
-- [ ] Alert rule configuration
-- [ ] Notification channels:
-  - [ ] Desktop notifications
+- [x] SQL-based alert engine
+- [x] Alert rule configuration
+- [x] Notification channels:
+  - [x] Desktop notifications
   - [ ] Slack webhooks
   - [ ] Email
   - [ ] Shell script execution

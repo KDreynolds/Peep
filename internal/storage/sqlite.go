@@ -116,3 +116,8 @@ func (s *Storage) GetLogs(limit int) ([]LogEntry, error) {
 func (s *Storage) Close() error {
 	return s.db.Close()
 }
+
+// GetDB returns the underlying database connection for advanced operations
+func (s *Storage) GetDB() *sql.DB {
+	return s.db
+}
