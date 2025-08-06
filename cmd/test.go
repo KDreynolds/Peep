@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/kylereynolds/peep/internal/notifications"
 	"github.com/spf13/cobra"
@@ -60,7 +61,75 @@ var testDesktopCmd = &cobra.Command{
 	},
 }
 
+var testEmailCmd = &cobra.Command{
+	Use:   "email",
+	Short: "Test email notification",
+	Long: `Send a test email notification to verify SMTP configuration.
+	
+Example:
+  peep test email --smtp-host smtp.gmail.com --username user@gmail.com --password app-password --from user@gmail.com --to recipient@example.com`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Get configuration from flags
+		smtpHost, _ := cmd.Flags().GetString("smtp-host")
+		smtpPort, _ := cmd.Flags().GetString("smtp-port")
+		username, _ := cmd.Flags().GetString("username")
+		password, _ := cmd.Flags().GetString("password")
+		fromEmail, _ := cmd.Flags().GetString("from")
+		fromName, _ := cmd.Flags().GetString("from-name")
+		toEmail, _ := cmd.Flags().GetString("to")
+
+		if smtpHost == "" || username == "" || password == "" || fromEmail == "" || toEmail == "" {
+			fmt.Println("❌ Email test requires SMTP configuration")
+			fmt.Println("💡 Required flags: --smtp-host, --username, --password, --from, --to")
+			fmt.Println("💡 Example: peep test email --smtp-host smtp.gmail.com --username user@gmail.com --password app-password --from user@gmail.com --to recipient@example.com")
+			return
+		}
+
+		fmt.Println("📧 Sending test email notification...")
+
+		// Parse SMTP port
+		port := 587 // default
+		if smtpPort != "" {
+			if parsedPort, err := strconv.Atoi(smtpPort); err == nil && parsedPort > 0 {
+				port = parsedPort
+			}
+		}
+
+		emailConfig := notifications.EmailConfig{
+			SMTPHost:  smtpHost,
+			SMTPPort:  port,
+			Username:  username,
+			Password:  password,
+			FromEmail: fromEmail,
+			FromName:  fromName,
+			ToEmails:  []string{toEmail},
+		}
+
+		emailNotifier := notifications.NewEmailNotification(emailConfig)
+
+		err := emailNotifier.TestConnection()
+		if err != nil {
+			fmt.Printf("❌ Failed to send email notification: %v\n", err)
+			fmt.Println("💡 Check your SMTP configuration and try again")
+			return
+		}
+
+		fmt.Println("✅ Test email sent successfully!")
+		fmt.Printf("🎉 Check %s for the test message\n", toEmail)
+	},
+}
+
 func init() {
+	// Add email test flags
+	testEmailCmd.Flags().StringP("smtp-host", "", "", "SMTP server hostname (e.g., smtp.gmail.com)")
+	testEmailCmd.Flags().StringP("smtp-port", "", "587", "SMTP server port (default: 587)")
+	testEmailCmd.Flags().StringP("username", "", "", "SMTP username/email")
+	testEmailCmd.Flags().StringP("password", "", "", "SMTP password (use app password for Gmail)")
+	testEmailCmd.Flags().StringP("from", "", "", "From email address")
+	testEmailCmd.Flags().StringP("from-name", "", "Peep Test", "From display name")
+	testEmailCmd.Flags().StringP("to", "", "", "Recipient email address")
+
 	testCmd.AddCommand(testSlackCmd)
 	testCmd.AddCommand(testDesktopCmd)
+	testCmd.AddCommand(testEmailCmd)
 }

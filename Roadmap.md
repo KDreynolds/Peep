@@ -57,7 +57,7 @@
 - [x] Notification channels:
   - [x] Desktop notifications
   - [x] Slack webhooks ⚠️ *Need to test with real Slack workspace*
-  - [ ] Email
+  - [x] Email notifications
   - [ ] Shell script execution
 - [ ] Basic dashboard views in TUI
 

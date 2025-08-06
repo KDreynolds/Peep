@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -507,8 +508,54 @@ func (e *Engine) sendSlackNotification(instance *AlertInstance, channel *Notific
 
 // sendEmailNotification sends an email notification
 func (e *Engine) sendEmailNotification(instance *AlertInstance, channel *NotificationChannel) error {
-	// Implementation for email notifications would go here
-	fmt.Printf("📧 Email notification: %s\n", instance.RuleName)
+	// Extract email configuration from channel config
+	emailConfig := notifications.EmailConfig{
+		SMTPHost:  channel.Config["smtp_host"],
+		Username:  channel.Config["username"],
+		Password:  channel.Config["password"],
+		FromEmail: channel.Config["from_email"],
+		FromName:  channel.Config["from_name"],
+		ToEmails:  strings.Split(channel.Config["to_emails"], ","),
+	}
+
+	// Parse SMTP port
+	if portStr, exists := channel.Config["smtp_port"]; exists {
+		if port, err := strconv.Atoi(portStr); err == nil && port > 0 {
+			emailConfig.SMTPPort = port
+		} else {
+			emailConfig.SMTPPort = 587 // Default SMTP port
+		}
+	} else {
+		emailConfig.SMTPPort = 587
+	}
+
+	// Clean up email addresses (trim spaces)
+	for i, email := range emailConfig.ToEmails {
+		emailConfig.ToEmails[i] = strings.TrimSpace(email)
+	}
+
+	emailNotifier := notifications.NewEmailNotification(emailConfig)
+
+	title := fmt.Sprintf("Alert: %s", instance.RuleName)
+	message := fmt.Sprintf("Alert threshold exceeded!\n\nRule: %s\nQuery: %s\nCount: %d\nThreshold: %d\nTime: %s",
+		instance.RuleName,
+		instance.Query,
+		instance.Count,
+		instance.Threshold,
+		instance.FiredAt.Format("2006-01-02 15:04:05"),
+	)
+
+	severity := "warning"
+	if instance.Count >= instance.Threshold*2 {
+		severity = "critical"
+	}
+
+	if err := emailNotifier.Send(title, message, severity); err != nil {
+		fmt.Printf("❌ Failed to send email notification: %v\n", err)
+		return err
+	}
+
+	fmt.Printf("📧 Email notification sent: %s\n", instance.RuleName)
 	return nil
 }
 

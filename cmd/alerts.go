@@ -17,7 +17,8 @@ Examples:
   peep alerts list                           # List all alert rules
   peep alerts add "High Errors" "SELECT COUNT(*) FROM logs WHERE level='error'" --threshold 5 --window 5m
   peep alerts channels list                  # List notification channels
-  peep alerts channels add desktop "Desktop Notifications"`,
+  peep alerts channels add desktop "Desktop Notifications"
+  peep alerts channels add email "Team Alerts" --smtp-host smtp.gmail.com --username user@gmail.com --password app-password --from user@gmail.com --to team@company.com`,
 }
 
 var alertsListCmd = &cobra.Command{
@@ -218,8 +219,33 @@ Examples:
 			// Desktop notifications don't need additional config
 
 		case "email":
-			fmt.Println("🚧 Email notifications coming soon!")
-			return
+			// Get email configuration from flags
+			smtpHost, _ := cmd.Flags().GetString("smtp-host")
+			smtpPort, _ := cmd.Flags().GetString("smtp-port")
+			username, _ := cmd.Flags().GetString("username")
+			password, _ := cmd.Flags().GetString("password")
+			fromEmail, _ := cmd.Flags().GetString("from")
+			fromName, _ := cmd.Flags().GetString("from-name")
+			toEmails, _ := cmd.Flags().GetString("to")
+
+			if smtpHost == "" || username == "" || password == "" || fromEmail == "" || toEmails == "" {
+				fmt.Println("❌ Email channels require SMTP configuration")
+				fmt.Println("💡 Required flags: --smtp-host, --username, --password, --from, --to")
+				fmt.Println("💡 Example: peep alerts channels add email \"Team Alerts\" \\")
+				fmt.Println("    --smtp-host smtp.gmail.com --smtp-port 587 \\")
+				fmt.Println("    --username your-email@gmail.com --password your-app-password \\")
+				fmt.Println("    --from your-email@gmail.com --from-name \"Peep Alerts\" \\")
+				fmt.Println("    --to team@company.com,admin@company.com")
+				return
+			}
+
+			config["smtp_host"] = smtpHost
+			config["smtp_port"] = smtpPort
+			config["username"] = username
+			config["password"] = password
+			config["from_email"] = fromEmail
+			config["from_name"] = fromName
+			config["to_emails"] = toEmails
 
 		case "shell":
 			fmt.Println("🚧 Shell script notifications coming soon!")
@@ -227,7 +253,7 @@ Examples:
 
 		default:
 			fmt.Printf("❌ Unknown channel type: %s\n", channelType)
-			fmt.Println("💡 Supported types: slack, desktop")
+			fmt.Println("💡 Supported types: slack, desktop, email, shell")
 			return
 		}
 
@@ -337,6 +363,15 @@ func init() {
 
 	// Add flags to the channels add command
 	alertsChannelsAddCmd.Flags().StringP("webhook", "", "", "Slack webhook URL (required for slack channels)")
+
+	// Email notification flags
+	alertsChannelsAddCmd.Flags().StringP("smtp-host", "", "", "SMTP server hostname (e.g., smtp.gmail.com)")
+	alertsChannelsAddCmd.Flags().StringP("smtp-port", "", "587", "SMTP server port (default: 587)")
+	alertsChannelsAddCmd.Flags().StringP("username", "", "", "SMTP username/email")
+	alertsChannelsAddCmd.Flags().StringP("password", "", "", "SMTP password (use app password for Gmail)")
+	alertsChannelsAddCmd.Flags().StringP("from", "", "", "From email address")
+	alertsChannelsAddCmd.Flags().StringP("from-name", "", "Peep Alerts", "From display name")
+	alertsChannelsAddCmd.Flags().StringP("to", "", "", "Recipient email addresses (comma-separated)")
 
 	// Build command hierarchy
 	alertsChannelsCmd.AddCommand(alertsChannelsListCmd)
