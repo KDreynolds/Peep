@@ -173,6 +173,15 @@ func (e *Engine) AddRule(rule *AlertRule) error {
 	return nil
 }
 
+// GetChannels returns all notification channels
+func (e *Engine) GetChannels() []*NotificationChannel {
+	channels := make([]*NotificationChannel, 0, len(e.channels))
+	for _, channel := range e.channels {
+		channels = append(channels, channel)
+	}
+	return channels
+}
+
 // GetRules returns all alert rules
 func (e *Engine) GetRules() []*AlertRule {
 	rules := make([]*AlertRule, 0, len(e.rules))
@@ -479,8 +488,20 @@ func (e *Engine) sendDesktopNotification(instance *AlertInstance, channel *Notif
 
 // sendSlackNotification sends a Slack notification
 func (e *Engine) sendSlackNotification(instance *AlertInstance, channel *NotificationChannel) error {
-	// Implementation for Slack webhooks would go here
-	fmt.Printf("📱 Slack notification: %s\n", instance.RuleName)
+	webhookURL, exists := channel.Config["webhook_url"]
+	if !exists {
+		return fmt.Errorf("slack channel missing webhook_url in config")
+	}
+
+	title := instance.RuleName
+	message := fmt.Sprintf("Alert threshold exceeded: **%d events** detected (limit: %d)", instance.Count, instance.Threshold)
+
+	if err := notifications.SendSlackNotification(webhookURL, title, message, instance.Count, instance.Threshold); err != nil {
+		fmt.Printf("❌ Failed to send Slack notification: %v\n", err)
+		return err
+	}
+
+	fmt.Printf("📱 Slack notification sent: %s [%d/%d]\n", instance.RuleName, instance.Count, instance.Threshold)
 	return nil
 }
 

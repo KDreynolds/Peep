@@ -126,9 +126,46 @@ var alertsChannelsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List notification channels",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("📢 Notification Channels:")
-		fmt.Println("🚧 Channel management coming soon!")
-		fmt.Println("💡 For now, alerts will be printed to console")
+		store, err := storage.NewStorage("logs.db")
+		if err != nil {
+			fmt.Printf("❌ Error initializing storage: %v\n", err)
+			return
+		}
+		defer store.Close()
+
+		engine, err := alerts.NewEngine(store)
+		if err != nil {
+			fmt.Printf("❌ Error initializing alert engine: %v\n", err)
+			return
+		}
+
+		channels := engine.GetChannels()
+		if len(channels) == 0 {
+			fmt.Println("� No notification channels configured.")
+			fmt.Println("� Add one with: peep alerts channels add slack \"Team Alerts\" --webhook https://hooks.slack.com/...")
+			return
+		}
+
+		fmt.Printf("📢 Notification Channels (%d):\n\n", len(channels))
+		for _, channel := range channels {
+			status := "🔴 Disabled"
+			if channel.Enabled {
+				status = "🟢 Enabled"
+			}
+
+			icon := getChannelIcon(channel.Type)
+			fmt.Printf("%s %s %s (%s)\n", status, icon, channel.Name, channel.Type)
+
+			// Show relevant config (without sensitive data)
+			if channel.Type == "slack" {
+				if webhookURL, exists := channel.Config["webhook_url"]; exists && webhookURL != "" {
+					// Mask webhook URL for security
+					maskedURL := maskWebhookURL(webhookURL)
+					fmt.Printf("   Webhook: %s\n", maskedURL)
+				}
+			}
+			fmt.Println()
+		}
 	},
 }
 
@@ -139,17 +176,110 @@ var alertsChannelsAddCmd = &cobra.Command{
 
 Supported types:
   desktop - Desktop notifications
-  slack   - Slack webhook (requires webhook URL)
+  slack   - Slack webhook (requires --webhook flag)
   email   - Email notifications (requires SMTP config)
-  shell   - Execute shell script (requires script path)`,
+  shell   - Execute shell script (requires script path)
+
+Examples:
+  peep alerts channels add slack "Team Alerts" --webhook https://hooks.slack.com/services/...
+  peep alerts channels add desktop "Local Notifications"`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		channelType := args[0]
 		name := args[1]
 
-		fmt.Printf("🚧 Adding %s channel '%s'...\n", channelType, name)
-		fmt.Println("📢 Channel management coming soon!")
+		store, err := storage.NewStorage("logs.db")
+		if err != nil {
+			fmt.Printf("❌ Error initializing storage: %v\n", err)
+			return
+		}
+		defer store.Close()
+
+		engine, err := alerts.NewEngine(store)
+		if err != nil {
+			fmt.Printf("❌ Error initializing alert engine: %v\n", err)
+			return
+		}
+
+		config := make(map[string]string)
+
+		// Handle type-specific configuration
+		switch channelType {
+		case "slack":
+			webhook, _ := cmd.Flags().GetString("webhook")
+			if webhook == "" {
+				fmt.Println("❌ Slack channels require a webhook URL")
+				fmt.Println("💡 Use: --webhook https://hooks.slack.com/services/...")
+				return
+			}
+			config["webhook_url"] = webhook
+
+		case "desktop":
+			// Desktop notifications don't need additional config
+
+		case "email":
+			fmt.Println("🚧 Email notifications coming soon!")
+			return
+
+		case "shell":
+			fmt.Println("🚧 Shell script notifications coming soon!")
+			return
+
+		default:
+			fmt.Printf("❌ Unknown channel type: %s\n", channelType)
+			fmt.Println("💡 Supported types: slack, desktop")
+			return
+		}
+
+		channel := &alerts.NotificationChannel{
+			Name:    name,
+			Type:    channelType,
+			Config:  config,
+			Enabled: true,
+		}
+
+		if err := engine.AddNotificationChannel(channel); err != nil {
+			fmt.Printf("❌ Error adding notification channel: %v\n", err)
+			return
+		}
+
+		icon := getChannelIcon(channelType)
+		fmt.Printf("✅ %s %s channel '%s' added successfully!\n", icon, channelType, name)
+
+		if channelType == "slack" {
+			fmt.Println("� Test it with: peep alerts start")
+		}
 	},
+}
+
+// getChannelIcon returns an icon for the channel type
+func getChannelIcon(channelType string) string {
+	switch channelType {
+	case "slack":
+		return "💬"
+	case "desktop":
+		return "🖥️"
+	case "email":
+		return "📧"
+	case "shell":
+		return "🖥️"
+	default:
+		return "📢"
+	}
+}
+
+// maskWebhookURL masks sensitive parts of webhook URLs
+func maskWebhookURL(url string) string {
+	if len(url) < 20 {
+		return "***"
+	}
+
+	// Show first 30 chars and last 10 chars, mask the middle
+	if len(url) > 40 {
+		return url[:30] + "..." + url[len(url)-10:]
+	}
+
+	return url[:len(url)/2] + "***"
 }
 
 var alertsStartCmd = &cobra.Command{
@@ -204,6 +334,9 @@ func init() {
 	alertsAddCmd.Flags().IntP("threshold", "t", 1, "Alert threshold (number of matching events)")
 	alertsAddCmd.Flags().StringP("window", "w", "5m", "Time window (e.g., 5m, 1h, 30s)")
 	alertsAddCmd.Flags().StringP("description", "d", "", "Alert rule description")
+
+	// Add flags to the channels add command
+	alertsChannelsAddCmd.Flags().StringP("webhook", "", "", "Slack webhook URL (required for slack channels)")
 
 	// Build command hierarchy
 	alertsChannelsCmd.AddCommand(alertsChannelsListCmd)

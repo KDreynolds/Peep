@@ -56,7 +56,7 @@
 - [x] Alert rule configuration
 - [x] Notification channels:
   - [x] Desktop notifications
-  - [ ] Slack webhooks
+  - [x] Slack webhooks ⚠️ *Need to test with real Slack workspace*
   - [ ] Email
   - [ ] Shell script execution
 - [ ] Basic dashboard views in TUI
