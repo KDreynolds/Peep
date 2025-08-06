@@ -183,7 +183,8 @@ Supported types:
 
 Examples:
   peep alerts channels add slack "Team Alerts" --webhook https://hooks.slack.com/services/...
-  peep alerts channels add desktop "Local Notifications"`,
+  peep alerts channels add desktop "Local Notifications"
+  peep alerts channels add shell "Custom Handler" --script ./alert-handler.sh`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		channelType := args[0]
@@ -248,8 +249,34 @@ Examples:
 			config["to_emails"] = toEmails
 
 		case "shell":
-			fmt.Println("🚧 Shell script notifications coming soon!")
-			return
+			// Get shell script configuration from flags
+			scriptPath, _ := cmd.Flags().GetString("script")
+			args, _ := cmd.Flags().GetString("args")
+			timeout, _ := cmd.Flags().GetString("timeout")
+			workingDir, _ := cmd.Flags().GetString("working-dir")
+			environment, _ := cmd.Flags().GetString("env")
+
+			if scriptPath == "" {
+				fmt.Println("❌ Shell channels require a script path")
+				fmt.Println("💡 Required flags: --script")
+				fmt.Println("💡 Example: peep alerts channels add shell \"Custom Webhook\" \\")
+				fmt.Println("    --script ./alert-handler.sh --timeout 30s")
+				return
+			}
+
+			config["script_path"] = scriptPath
+			if args != "" {
+				config["args"] = args
+			}
+			if timeout != "" {
+				config["timeout"] = timeout
+			}
+			if workingDir != "" {
+				config["working_dir"] = workingDir
+			}
+			if environment != "" {
+				config["environment"] = environment
+			}
 
 		default:
 			fmt.Printf("❌ Unknown channel type: %s\n", channelType)
@@ -373,7 +400,12 @@ func init() {
 	alertsChannelsAddCmd.Flags().StringP("from-name", "", "Peep Alerts", "From display name")
 	alertsChannelsAddCmd.Flags().StringP("to", "", "", "Recipient email addresses (comma-separated)")
 
-	// Build command hierarchy
+	// Shell script notification flags
+	alertsChannelsAddCmd.Flags().StringP("script", "", "", "Path to shell script (required for shell channels)")
+	alertsChannelsAddCmd.Flags().StringP("args", "", "", "Arguments to pass to script (space-separated)")
+	alertsChannelsAddCmd.Flags().StringP("timeout", "", "30s", "Script execution timeout (e.g., 30s, 1m)")
+	alertsChannelsAddCmd.Flags().StringP("working-dir", "", "", "Working directory for script execution")
+	alertsChannelsAddCmd.Flags().StringP("env", "", "", "Environment variables (comma-separated KEY=VALUE pairs)") // Build command hierarchy
 	alertsChannelsCmd.AddCommand(alertsChannelsListCmd)
 	alertsChannelsCmd.AddCommand(alertsChannelsAddCmd)
 

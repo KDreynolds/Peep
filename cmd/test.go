@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/kylereynolds/peep/internal/notifications"
 	"github.com/spf13/cobra"
@@ -119,6 +121,72 @@ Example:
 	},
 }
 
+var testShellCmd = &cobra.Command{
+	Use:   "shell [script-path]",
+	Short: "Test shell script notification",
+	Long: `Execute a shell script with test alert data to verify it works.
+	
+Example:
+  peep test shell ./alert-handler.sh
+  peep test shell /path/to/script.sh --timeout 60s --args "--verbose"`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		scriptPath := args[0]
+
+		// Get configuration from flags
+		argsStr, _ := cmd.Flags().GetString("args")
+		timeoutStr, _ := cmd.Flags().GetString("timeout")
+		workingDir, _ := cmd.Flags().GetString("working-dir")
+		envStr, _ := cmd.Flags().GetString("env")
+
+		fmt.Printf("🖥️  Testing shell script: %s\n", scriptPath)
+
+		// Parse timeout
+		timeout := 30 * time.Second
+		if timeoutStr != "" {
+			if parsedTimeout, err := time.ParseDuration(timeoutStr); err == nil {
+				timeout = parsedTimeout
+			}
+		}
+
+		// Parse args
+		var scriptArgs []string
+		if argsStr != "" {
+			scriptArgs = strings.Split(argsStr, " ")
+		}
+
+		// Parse environment variables
+		environment := make(map[string]string)
+		if envStr != "" {
+			for _, pair := range strings.Split(envStr, ",") {
+				if parts := strings.SplitN(strings.TrimSpace(pair), "=", 2); len(parts) == 2 {
+					environment[parts[0]] = parts[1]
+				}
+			}
+		}
+
+		shellConfig := notifications.ShellConfig{
+			ScriptPath:  scriptPath,
+			Args:        scriptArgs,
+			Timeout:     timeout,
+			WorkingDir:  workingDir,
+			Environment: environment,
+		}
+
+		shellNotifier := notifications.NewShellNotification(shellConfig)
+
+		err := shellNotifier.TestScript()
+		if err != nil {
+			fmt.Printf("❌ Failed to execute shell script: %v\n", err)
+			fmt.Println("💡 Check script path, permissions, and try again")
+			return
+		}
+
+		fmt.Println("✅ Shell script executed successfully!")
+		fmt.Printf("🎉 Script %s handled the test alert\n", scriptPath)
+	},
+}
+
 func init() {
 	// Add email test flags
 	testEmailCmd.Flags().StringP("smtp-host", "", "", "SMTP server hostname (e.g., smtp.gmail.com)")
@@ -129,7 +197,14 @@ func init() {
 	testEmailCmd.Flags().StringP("from-name", "", "Peep Test", "From display name")
 	testEmailCmd.Flags().StringP("to", "", "", "Recipient email address")
 
+	// Add shell test flags
+	testShellCmd.Flags().StringP("args", "", "", "Arguments to pass to script (space-separated)")
+	testShellCmd.Flags().StringP("timeout", "", "30s", "Script execution timeout (e.g., 30s, 1m)")
+	testShellCmd.Flags().StringP("working-dir", "", "", "Working directory for script execution")
+	testShellCmd.Flags().StringP("env", "", "", "Environment variables (comma-separated KEY=VALUE pairs)")
+
 	testCmd.AddCommand(testSlackCmd)
 	testCmd.AddCommand(testDesktopCmd)
 	testCmd.AddCommand(testEmailCmd)
+	testCmd.AddCommand(testShellCmd)
 }

@@ -1,0 +1,88 @@
+#!/bin/bash
+
+echo "🖥️  Peep Shell Script Notifications Demo"
+echo "========================================="
+echo ""
+echo "This script demonstrates how to configure and test shell script notifications in Peep."
+echo ""
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}1. Adding a shell script notification channel:${NC}"
+echo ""
+echo "peep alerts channels add shell \"Custom Handler\" \\"
+echo "  --script ./alert-handler.sh \\"
+echo "  --timeout 30s \\"
+echo "  --args \"--verbose --log-level info\" \\"
+echo "  --env \"WEBHOOK_URL=https://api.example.com,API_KEY=secret\""
+echo ""
+
+echo -e "${BLUE}2. Testing shell script configuration:${NC}"
+echo ""
+echo "peep test shell ./alert-handler.sh \\"
+echo "  --timeout 60s \\"
+echo "  --env \"DEBUG=1,LOG_LEVEL=verbose\""
+echo ""
+
+echo -e "${BLUE}3. Shell script environment variables (available to your script):${NC}"
+echo "  ✅ PEEP_ALERT_TITLE      - Alert rule name"
+echo "  ✅ PEEP_ALERT_MESSAGE    - Detailed alert message"
+echo "  ✅ PEEP_ALERT_SEVERITY   - Severity level (critical, warning, info)"
+echo "  ✅ PEEP_ALERT_COUNT      - Number of events that triggered the alert"
+echo "  ✅ PEEP_ALERT_THRESHOLD  - Alert threshold value"
+echo "  ✅ PEEP_ALERT_TIMESTAMP  - When the alert was triggered"
+echo "  ✅ PEEP_ALERT_RATIO      - Count/threshold ratio (useful for severity decisions)"
+echo ""
+
+echo -e "${BLUE}4. Example shell script (alert-handler.sh):${NC}"
+echo ""
+echo -e "${YELLOW}#!/bin/bash${NC}"
+echo ""
+echo "# Log the alert"
+echo "echo \"\$(date): \$PEEP_ALERT_TITLE (\$PEEP_ALERT_COUNT/\$PEEP_ALERT_THRESHOLD)\" >> alerts.log"
+echo ""
+echo "# Send to webhook"
+echo "curl -X POST https://hooks.example.com/alerts \\"
+echo "  -H \"Content-Type: application/json\" \\"
+echo "  -d \"{\\\"title\\\":\\\"\$PEEP_ALERT_TITLE\\\",\\\"count\\\":\$PEEP_ALERT_COUNT}\""
+echo ""
+echo "# Play sound on critical alerts"
+echo "if [ \"\$PEEP_ALERT_SEVERITY\" = \"critical\" ]; then"
+echo "  afplay /System/Library/Sounds/Sosumi.aiff  # macOS"
+echo "fi"
+echo ""
+
+echo -e "${BLUE}5. Shell script features:${NC}"
+echo "  ✅ Full environment variable access"
+echo "  ✅ Configurable timeout (prevents hanging)"
+echo "  ✅ Custom arguments and working directory"
+echo "  ✅ Environment variable injection"
+echo "  ✅ Script validation (existence, permissions)"
+echo "  ✅ Cross-platform support (bash, zsh, fish, PowerShell)"
+echo ""
+
+echo -e "${BLUE}6. Example alert rule that triggers shell script:${NC}"
+echo ""
+echo "peep alerts add \"Critical Errors\" \\"
+echo "  \"SELECT COUNT(*) FROM logs WHERE level='error' AND timestamp > datetime('now', '-5 minutes')\" \\"
+echo "  --threshold 10 --window 5m"
+echo ""
+
+echo -e "${BLUE}7. Common use cases:${NC}"
+echo "  📄 Custom logging and auditing"
+echo "  🌐 Integration with existing webhooks"
+echo "  🔔 Platform-specific notifications"
+echo "  📊 Data forwarding to monitoring systems"
+echo "  🔧 Automated remediation actions"
+echo "  📱 Integration with mobile push services"
+echo ""
+
+echo -e "${GREEN}🖥️  Shell script notifications provide unlimited flexibility!${NC}"
+echo "   • Execute any command or script"
+echo "   • Rich environment variable context"
+echo "   • Timeout protection and error handling"
+echo "   • Perfect for custom integrations"

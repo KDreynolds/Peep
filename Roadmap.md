@@ -58,7 +58,7 @@
   - [x] Desktop notifications
   - [x] Slack webhooks ⚠️ *Need to test with real Slack workspace*
   - [x] Email notifications
-  - [ ] Shell script execution
+  - [x] Shell script execution
 - [ ] Basic dashboard views in TUI
 
 **Week 4: Web Interface**

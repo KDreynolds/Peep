@@ -383,11 +383,6 @@ func containsWhere(query string) bool {
 	return strings.Contains(strings.ToUpper(query), "WHERE")
 }
 
-// containsIgnoreCase checks if string contains substring (case insensitive)
-func containsIgnoreCase(s, substr string) bool {
-	return strings.Contains(strings.ToUpper(s), strings.ToUpper(substr))
-}
-
 // fireAlert creates an alert instance and sends notifications
 func (e *Engine) fireAlert(rule *AlertRule, count int) error {
 	// Create alert instance
@@ -561,8 +556,69 @@ func (e *Engine) sendEmailNotification(instance *AlertInstance, channel *Notific
 
 // sendShellNotification executes a shell script
 func (e *Engine) sendShellNotification(instance *AlertInstance, channel *NotificationChannel) error {
-	// Implementation for shell script execution would go here
-	fmt.Printf("🖥️  Shell notification: %s\n", instance.RuleName)
+	scriptPath, exists := channel.Config["script_path"]
+	if !exists {
+		return fmt.Errorf("shell channel missing script_path in config")
+	}
+
+	// Parse timeout (optional)
+	timeout := 30 * time.Second
+	if timeoutStr, exists := channel.Config["timeout"]; exists {
+		if parsedTimeout, err := time.ParseDuration(timeoutStr); err == nil {
+			timeout = parsedTimeout
+		}
+	}
+
+	// Parse args (optional)
+	var args []string
+	if argsStr, exists := channel.Config["args"]; exists && argsStr != "" {
+		args = strings.Split(argsStr, " ")
+	}
+
+	// Parse working directory (optional)
+	workingDir := channel.Config["working_dir"]
+
+	// Parse custom environment variables (optional)
+	environment := make(map[string]string)
+	if envStr, exists := channel.Config["environment"]; exists && envStr != "" {
+		// Parse environment as comma-separated KEY=VALUE pairs
+		for _, pair := range strings.Split(envStr, ",") {
+			if parts := strings.SplitN(strings.TrimSpace(pair), "=", 2); len(parts) == 2 {
+				environment[parts[0]] = parts[1]
+			}
+		}
+	}
+
+	shellConfig := notifications.ShellConfig{
+		ScriptPath:  scriptPath,
+		Args:        args,
+		Timeout:     timeout,
+		WorkingDir:  workingDir,
+		Environment: environment,
+	}
+
+	shellNotifier := notifications.NewShellNotification(shellConfig)
+
+	title := instance.RuleName
+	message := fmt.Sprintf("Alert threshold exceeded!\n\nRule: %s\nQuery: %s\nCount: %d\nThreshold: %d\nTime: %s",
+		instance.RuleName,
+		instance.Query,
+		instance.Count,
+		instance.Threshold,
+		instance.FiredAt.Format("2006-01-02 15:04:05"),
+	)
+
+	severity := "warning"
+	if instance.Count >= instance.Threshold*2 {
+		severity = "critical"
+	}
+
+	if err := shellNotifier.Execute(title, message, severity, instance.Count, instance.Threshold); err != nil {
+		fmt.Printf("❌ Failed to execute shell notification: %v\n", err)
+		return err
+	}
+
+	fmt.Printf("🖥️  Shell script executed: %s [%s]\n", instance.RuleName, scriptPath)
 	return nil
 }
 
