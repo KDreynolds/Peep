@@ -56,7 +56,10 @@ func (s *Server) Start(port int) error {
 	http.HandleFunc("/alerts/rules/add", s.handleAddAlertRule)
 	http.HandleFunc("/alerts/channels", s.handleAlertChannels)
 	http.HandleFunc("/alerts/channels/add", s.handleAddAlertChannel)
+	http.HandleFunc("/alerts/tab/rules", s.handleAlertsTabRules)
+	http.HandleFunc("/alerts/tab/channels", s.handleAlertsTabChannels)
 	http.HandleFunc("/api/stats", s.handleAPIStats)
+	http.HandleFunc("/api/debug/channels", s.handleDebugChannels)
 
 	addr := fmt.Sprintf(":%d", port)
 	fmt.Printf("🌐 Starting web server on http://localhost%s\n", addr)
@@ -567,6 +570,141 @@ func (s *Server) handleAPIStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(statsHTML))
+}
+
+func (s *Server) handleDebugChannels(w http.ResponseWriter, r *http.Request) {
+	channels := s.engine.GetChannels()
+	w.Header().Set("Content-Type", "application/json")
+
+	// Simple JSON output for debugging
+	fmt.Fprintf(w, `{"count": %d, "channels": [`, len(channels))
+	for i, ch := range channels {
+		if i > 0 {
+			fmt.Fprint(w, ",")
+		}
+		fmt.Fprintf(w, `{"id": %d, "name": "%s", "type": "%s", "enabled": %t}`, ch.ID, ch.Name, ch.Type, ch.Enabled)
+	}
+	fmt.Fprint(w, "]}")
+}
+
+func (s *Server) handleAlertsTabRules(w http.ResponseWriter, r *http.Request) {
+	rules := s.engine.GetRules()
+
+	tmpl := `<div class="card">
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+			<h2 style="font-size: 1.25rem;">📋 Alert Rules</h2>
+			<a href="/alerts/rules/add" class="btn btn-primary">+ Add Rule</a>
+		</div>
+		
+		{{if .Rules}}
+			{{range .Rules}}
+			<div class="rule-item">
+				<div class="rule-header">
+					<div class="rule-title">{{.Name}}</div>
+					<div>
+						{{if .Enabled}}
+							<span class="status-badge status-enabled">Enabled</span>
+						{{else}}
+							<span class="status-badge status-disabled">Disabled</span>
+						{{end}}
+					</div>
+				</div>
+				<div class="rule-description">{{.Description}}</div>
+				<div class="rule-query">{{.Query}}</div>
+				<div class="rule-meta">
+					<span>Threshold: {{.Threshold}}</span>
+					<span>Window: {{.Window}}</span>
+				</div>
+			</div>
+			{{end}}
+		{{else}}
+			<div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+				<div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
+				<h3>No alert rules configured</h3>
+				<p>Create your first alert rule to start monitoring your logs.</p>
+			</div>
+		{{end}}
+	</div>`
+
+	data := struct {
+		Rules []*alerts.AlertRule
+	}{
+		Rules: rules,
+	}
+
+	t, err := template.New("rulesTab").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	if err := t.Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleAlertsTabChannels(w http.ResponseWriter, r *http.Request) {
+	channels := s.engine.GetChannels()
+
+	tmpl := `<div class="card">
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+			<h2 style="font-size: 1.25rem;">📢 Notification Channels</h2>
+			<a href="/alerts/channels/add" class="btn btn-primary">+ Add Channel</a>
+		</div>
+		
+		{{if .Channels}}
+			{{range .Channels}}
+			<div class="channel-item">
+				<div class="channel-header">
+					<div class="channel-title">{{.Name}}</div>
+					<div>
+						{{if .Enabled}}
+							<span class="status-badge status-enabled">Enabled</span>
+						{{else}}
+							<span class="status-badge status-disabled">Disabled</span>
+						{{end}}
+					</div>
+				</div>
+				<div class="channel-meta">
+					<span><strong>Type:</strong> {{.Type}}</span>
+					{{if eq .Type "slack"}}
+						<span><strong>Webhook:</strong> {{if index .Config "webhook_url"}}Configured{{else}}Not set{{end}}</span>
+					{{else if eq .Type "email"}}
+						<span><strong>SMTP:</strong> {{index .Config "smtp_host"}}:{{index .Config "smtp_port"}}</span>
+					{{else if eq .Type "shell"}}
+						<span><strong>Script:</strong> {{index .Config "script_path"}}</span>
+					{{end}}
+				</div>
+			</div>
+			{{end}}
+		{{else}}
+			<div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+				<div style="font-size: 3rem; margin-bottom: 1rem;">📬</div>
+				<h3>No notification channels configured</h3>
+				<p>Add channels to receive alert notifications.</p>
+			</div>
+		{{end}}
+	</div>`
+
+	data := struct {
+		Channels []*alerts.NotificationChannel
+	}{
+		Channels: channels,
+	}
+
+	t, err := template.New("channelsTab").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	if err := t.Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
@@ -1141,16 +1279,21 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
             margin-bottom: 1.5rem;
         }
         
-        .tab-nav button {
+        .tab-btn {
             background: none;
             border: none;
             padding: 0.75rem 1.5rem;
             font-size: 0.875rem;
             cursor: pointer;
             border-bottom: 2px solid transparent;
+            transition: all 0.2s;
         }
         
-        .tab-nav button.active {
+        .tab-btn:hover {
+            background: var(--gray-50);
+        }
+        
+        .tab-btn.active {
             color: var(--primary);
             border-bottom-color: var(--primary);
         }
@@ -1180,14 +1323,29 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
         <h1 style="margin-bottom: 1.5rem; font-size: 1.75rem;">🚨 Alert Management</h1>
         
         <div class="tab-nav">
-            <button class="active" onclick="showTab('rules')">Alert Rules</button>
-            <button onclick="showTab('channels')">Notification Channels</button>
+            <button class="tab-btn active" 
+                    hx-get="/alerts/tab/rules" 
+                    hx-target="#tab-container" 
+                    hx-swap="innerHTML"
+                    hx-on:click="
+                        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                        this.classList.add('active');
+                    ">Alert Rules</button>
+            <button class="tab-btn" 
+                    hx-get="/alerts/tab/channels" 
+                    hx-target="#tab-container" 
+                    hx-swap="innerHTML"
+                    hx-on:click="
+                        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                        this.classList.add('active');
+                    ">Notification Channels</button>
         </div>
 
-        <!-- Alert Rules Tab -->
-        <div id="rules-tab" class="tab-content active">
+        <!-- Tab Container -->
+        <div id="tab-container">
+            <!-- Default content will be loaded via HTMX -->
             <div class="card">
-                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                     <h2 style="font-size: 1.25rem;">📋 Alert Rules</h2>
                     <a href="/alerts/rules/add" class="btn btn-primary">+ Add Rule</a>
                 </div>
@@ -1226,64 +1384,8 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
             </div>
         </div>
 
-        <!-- Notification Channels Tab -->
-        <div id="channels-tab" class="tab-content">
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h2 style="font-size: 1.25rem;">📢 Notification Channels</h2>
-                    <a href="/alerts/channels/add" class="btn btn-primary">+ Add Channel</a>
-                </div>
-                
-                {{if .Channels}}
-                    {{range .Channels}}
-                    <div class="channel-item">
-                        <div class="channel-header">
-                            <div class="channel-title">{{.Name}}</div>
-                            <div>
-                                {{if .Enabled}}
-                                    <span class="status-badge status-enabled">Enabled</span>
-                                {{else}}
-                                    <span class="status-badge status-disabled">Disabled</span>
-                                {{end}}
-                            </div>
-                        </div>
-                        <div class="channel-meta">
-                            <span><strong>Type:</strong> {{.Type}}</span>
-                            {{if eq .Type "slack"}}
-                                <span><strong>Webhook:</strong> {{if .Config.WebhookURL}}Configured{{else}}Not set{{end}}</span>
-                            {{else if eq .Type "email"}}
-                                <span><strong>SMTP:</strong> {{.Config.SMTPHost}}:{{.Config.SMTPPort}}</span>
-                            {{else if eq .Type "shell"}}
-                                <span><strong>Script:</strong> {{.Config.ScriptPath}}</span>
-                            {{end}}
-                        </div>
-                    </div>
-                    {{end}}
-                {{else}}
-                    <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
-                        <div style="font-size: 3rem; margin-bottom: 1rem;">📬</div>
-                        <h3>No notification channels configured</h3>
-                        <p>Add channels to receive alert notifications.</p>
-                    </div>
-                {{end}}
-            </div>
-        </div>
-    </div>
-
     <script>
-        function showTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab-nav button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Show selected tab
-            document.getElementById(tabName + '-tab').classList.add('active');
-            event.target.classList.add('active');
-        }
+        // Tab functionality handled by HTMX inline events
     </script>
 </body>
 </html>`
@@ -1710,5 +1812,493 @@ func (s *Server) handleAlertChannels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddAlertChannel(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Add alert channel form coming soon!"))
+	if r.Method == "GET" {
+		// Show the form
+		tmpl := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Notification Channel - Peep</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+        
+        .container { max-width: 800px; margin: 0 auto; padding: 0 1rem; }
+        
+        header {
+            background: white;
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo { font-size: 1.5rem; font-weight: bold; color: var(--primary); }
+        .tagline { font-size: 0.875rem; color: var(--gray-500); margin-left: 0.5rem; }
+        
+        nav { display: flex; gap: 1rem; }
+        nav a {
+            text-decoration: none;
+            color: var(--gray-700);
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s;
+        }
+        nav a:hover, nav a.active { background: var(--gray-100); }
+        
+        .card {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--gray-700);
+        }
+        
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        
+        .form-help {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-top: 0.25rem;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+            margin-right: 0.5rem;
+        }
+        
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-secondary { background: var(--gray-200); color: var(--gray-700); }
+        .btn-secondary:hover { background: var(--gray-300); }
+        
+        .breadcrumb {
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+        
+        .breadcrumb a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        
+        .channel-config {
+            display: none;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .channel-config.active {
+            display: block;
+        }
+        
+        .channel-config h4 {
+            margin-bottom: 1rem;
+            color: var(--gray-700);
+        }
+        
+        .config-example {
+            background: var(--gray-100);
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div>
+                    <span class="logo">🔍 Peep</span>
+                    <span class="tagline">Observability for humans</span>
+                </div>
+                <nav>
+                    <a href="/">Dashboard</a>
+                    <a href="/logs">Logs</a>
+                    <a href="/alerts" class="active">Alerts</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="breadcrumb">
+            <a href="/alerts">Alerts</a> / Add Channel
+        </div>
+        
+        <div class="card">
+            <h1 style="margin-bottom: 1.5rem; font-size: 1.5rem;">📢 Add Notification Channel</h1>
+            
+            <form hx-post="/alerts/channels/add" hx-target="#form-result">
+                <div class="form-group">
+                    <label for="name">Channel Name *</label>
+                    <input type="text" id="name" name="name" required placeholder="e.g., Team Slack, DevOps Email">
+                    <div class="form-help">A descriptive name for this notification channel</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="type">Channel Type *</label>
+                    <select id="type" name="type" required onchange="showChannelConfig(this.value)">
+                        <option value="">Select channel type...</option>
+                        <option value="slack">Slack (Webhook)</option>
+                        <option value="email">Email (SMTP)</option>
+                        <option value="shell">Shell Script</option>
+                        <option value="desktop">Desktop Notifications</option>
+                    </select>
+                    <div class="form-help">Choose how you want to receive notifications</div>
+                </div>
+
+                <!-- Slack Configuration -->
+                <div id="slack-config" class="channel-config">
+                    <h4>🔗 Slack Configuration</h4>
+                    <div class="form-group">
+                        <label for="slack-webhook">Webhook URL *</label>
+                        <input type="url" id="slack-webhook" name="slack-webhook" placeholder="https://hooks.slack.com/services/...">
+                        <div class="form-help">Get this from your Slack app's "Incoming Webhooks" settings</div>
+                        <div class="config-example">Example: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="slack-channel">Channel (optional)</label>
+                        <input type="text" id="slack-channel" name="slack-channel" placeholder="#alerts">
+                        <div class="form-help">Override default channel (include # for channels, @ for users)</div>
+                    </div>
+                </div>
+
+                <!-- Email Configuration -->
+                <div id="email-config" class="channel-config">
+                    <h4>📧 Email Configuration</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email-smtp-host">SMTP Host *</label>
+                            <input type="text" id="email-smtp-host" name="email-smtp-host" placeholder="smtp.gmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="email-smtp-port">SMTP Port *</label>
+                            <input type="number" id="email-smtp-port" name="email-smtp-port" placeholder="587" value="587">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email-username">Username *</label>
+                            <input type="text" id="email-username" name="email-username" placeholder="your-email@gmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="email-password">Password *</label>
+                            <input type="password" id="email-password" name="email-password" placeholder="app-password">
+                            <div class="form-help">Use app password for Gmail</div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email-from">From Email *</label>
+                            <input type="email" id="email-from" name="email-from" placeholder="alerts@yourcompany.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="email-to">To Email(s) *</label>
+                            <input type="text" id="email-to" name="email-to" placeholder="team@yourcompany.com">
+                            <div class="form-help">Comma-separated for multiple recipients</div>
+                        </div>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="email-tls" name="email-tls" checked>
+                        <label for="email-tls">Use TLS encryption</label>
+                    </div>
+                </div>
+
+                <!-- Shell Script Configuration -->
+                <div id="shell-config" class="channel-config">
+                    <h4>⚡ Shell Script Configuration</h4>
+                    <div class="form-group">
+                        <label for="shell-script">Script Path *</label>
+                        <input type="text" id="shell-script" name="shell-script" placeholder="/path/to/alert-handler.sh">
+                        <div class="form-help">Absolute path to your alert handler script</div>
+                        <div class="config-example">Script will receive: ALERT_TITLE, ALERT_MESSAGE, ALERT_COUNT, ALERT_THRESHOLD environment variables</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="shell-args">Arguments (optional)</label>
+                        <input type="text" id="shell-args" name="shell-args" placeholder="--format json --urgent">
+                        <div class="form-help">Space-separated arguments to pass to the script</div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="shell-timeout">Timeout (seconds)</label>
+                            <input type="number" id="shell-timeout" name="shell-timeout" value="30" min="1" max="300">
+                        </div>
+                        <div class="form-group">
+                            <label for="shell-workdir">Working Directory</label>
+                            <input type="text" id="shell-workdir" name="shell-workdir" placeholder="/opt/peep">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Desktop Configuration -->
+                <div id="desktop-config" class="channel-config">
+                    <h4>🖥️ Desktop Notifications</h4>
+                    <p style="color: var(--gray-600); margin-bottom: 1rem;">
+                        Desktop notifications work out of the box on macOS, Linux, and Windows. 
+                        No additional configuration required.
+                    </p>
+                    <div class="config-example">
+                        ✅ Notifications will appear in your system notification area<br>
+                        🔔 Make sure Peep has notification permissions on your system
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="enabled" name="enabled" checked>
+                        <label for="enabled">Enable this channel</label>
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem;">
+                    <button type="submit" class="btn btn-primary">Create Notification Channel</button>
+                    <a href="/alerts" class="btn btn-secondary">Cancel</a>
+                </div>
+
+                <div id="form-result" style="margin-top: 1rem;"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showChannelConfig(channelType) {
+            // Hide all config sections
+            document.querySelectorAll('.channel-config').forEach(config => {
+                config.classList.remove('active');
+            });
+            
+            // Show selected config section
+            if (channelType) {
+                const configElement = document.getElementById(channelType + '-config');
+                if (configElement) {
+                    configElement.classList.add('active');
+                }
+            }
+        }
+    </script>
+</body>
+</html>`
+
+		t, err := template.New("addChannel").Parse(tmpl)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := t.Execute(w, nil); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+	} else if r.Method == "POST" {
+		// Handle form submission
+		err := r.ParseForm()
+		if err != nil {
+			http.Error(w, "Invalid form data", http.StatusBadRequest)
+			return
+		}
+
+		// Extract common fields
+		name := r.FormValue("name")
+		channelType := r.FormValue("type")
+		enabled := r.FormValue("enabled") == "on"
+
+		// Validate required fields
+		if name == "" || channelType == "" {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<div style="color: var(--danger); padding: 1rem; background: #fee2e2; border-radius: 0.375rem;">
+				❌ Please fill in channel name and type.
+			</div>`))
+			return
+		}
+
+		// Build config based on channel type
+		config := make(map[string]string)
+
+		switch channelType {
+		case "slack":
+			webhookURL := r.FormValue("slack-webhook")
+			channel := r.FormValue("slack-channel")
+
+			if webhookURL == "" {
+				w.Header().Set("Content-Type", "text/html")
+				w.Write([]byte(`<div style="color: var(--danger); padding: 1rem; background: #fee2e2; border-radius: 0.375rem;">
+					❌ Slack webhook URL is required.
+				</div>`))
+				return
+			}
+
+			config["webhook_url"] = webhookURL
+			if channel != "" {
+				config["channel"] = channel
+			}
+
+		case "email":
+			smtpHost := r.FormValue("email-smtp-host")
+			smtpPort := r.FormValue("email-smtp-port")
+			username := r.FormValue("email-username")
+			password := r.FormValue("email-password")
+			fromEmail := r.FormValue("email-from")
+			toEmail := r.FormValue("email-to")
+			useTLS := r.FormValue("email-tls") == "on"
+
+			if smtpHost == "" || smtpPort == "" || username == "" || password == "" || fromEmail == "" || toEmail == "" {
+				w.Header().Set("Content-Type", "text/html")
+				w.Write([]byte(`<div style="color: var(--danger); padding: 1rem; background: #fee2e2; border-radius: 0.375rem;">
+					❌ Please fill in all required email fields.
+				</div>`))
+				return
+			}
+
+			config["smtp_host"] = smtpHost
+			config["smtp_port"] = smtpPort
+			config["username"] = username
+			config["password"] = password
+			config["from_email"] = fromEmail
+			config["to_emails"] = toEmail
+			if useTLS {
+				config["use_tls"] = "true"
+			}
+
+		case "shell":
+			scriptPath := r.FormValue("shell-script")
+			args := r.FormValue("shell-args")
+			timeout := r.FormValue("shell-timeout")
+			workdir := r.FormValue("shell-workdir")
+
+			if scriptPath == "" {
+				w.Header().Set("Content-Type", "text/html")
+				w.Write([]byte(`<div style="color: var(--danger); padding: 1rem; background: #fee2e2; border-radius: 0.375rem;">
+					❌ Script path is required for shell notifications.
+				</div>`))
+				return
+			}
+
+			config["script_path"] = scriptPath
+			if args != "" {
+				config["args"] = args
+			}
+			if timeout != "" {
+				config["timeout"] = timeout
+			}
+			if workdir != "" {
+				config["working_dir"] = workdir
+			}
+
+		case "desktop":
+			// Desktop notifications need no additional config
+			config["enabled"] = "true"
+		}
+
+		// Create the notification channel
+		channel := &alerts.NotificationChannel{
+			Name:    name,
+			Type:    channelType,
+			Config:  config,
+			Enabled: enabled,
+		}
+
+		// Add the channel via the engine
+		err = s.engine.AddNotificationChannel(channel)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(fmt.Sprintf(`<div style="color: var(--danger); padding: 1rem; background: #fee2e2; border-radius: 0.375rem;">
+				❌ Error creating channel: %s
+			</div>`, err.Error())))
+			return
+		}
+
+		// Success response with redirect
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<div style="color: var(--success); padding: 1rem; background: #d1fae5; border-radius: 0.375rem;">
+			✅ Notification channel created successfully! <a href="/alerts">View all channels</a>
+		</div>`))
+	}
 }
