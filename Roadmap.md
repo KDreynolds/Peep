@@ -62,11 +62,17 @@
 - [ ] Basic dashboard views in TUI
 
 **Week 4: Web Interface**
-- [ ] Minimal web server (localhost:8080)
-- [ ] Basic React/Svelte frontend
-- [ ] Log viewer and search
-- [ ] Simple dashboard creation
-- [ ] Alert management UI
+- [x] Minimal web server (localhost:8080)
+- [x] Basic React/Svelte frontend
+- [x] Log viewer and search
+- [x] Simple dashboard creation
+- [x] Alert management UI
+
+**Week 4 Additional: Production Readiness**
+- [ ] HTTP error detection alerts
+- [ ] Log retention and cleanup commands
+- [ ] Ingestion filtering by log level
+- [ ] Database maintenance utilities
 
 ### Phase 3: Polish & Launch (Weeks 5-6)
 **Week 5: Dogfooding & Feedback**
@@ -159,6 +165,9 @@ peep/
 - [ ] GitHub CI/CD integration
 - [ ] SQLite WAL mode for performance
 - [ ] Plugin system (WASM-based)
+- [ ] Log retention management and pruning
+- [ ] Log level filtering during ingestion
+- [ ] Performance optimization for large datasets
 
 ### Phase 5: Hosted Option
 - [ ] Peep Cloud (freemium model)

@@ -45,4 +45,5 @@ func init() {
 	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(tuiCmd)
 	rootCmd.AddCommand(webCmd)
+	rootCmd.AddCommand(cleanCmd)
 }
