@@ -69,10 +69,12 @@
 - [x] Alert management UI
 
 **Week 4 Additional: Production Readiness**
-- [ ] HTTP error detection alerts
-- [ ] Log retention and cleanup commands
-- [ ] Ingestion filtering by log level
-- [ ] Database maintenance utilities
+- [x] HTTP error detection alerts
+- [x] Log retention and cleanup commands
+- [x] Ingestion filtering by log level
+- [x] Database maintenance utilities
+- [ ] Service deployment and daemon mode
+- [ ] Stats and monitoring commands
 
 ### Phase 3: Polish & Launch (Weeks 5-6)
 **Week 5: Dogfooding & Feedback**
@@ -168,6 +170,9 @@ peep/
 - [ ] Log retention management and pruning
 - [ ] Log level filtering during ingestion
 - [ ] Performance optimization for large datasets
+- [ ] Service deployment (systemd, Docker, K8s)
+- [ ] Daemon mode with auto-restart and health checks
+- [ ] Resource monitoring and limits
 
 ### Phase 5: Hosted Option
 - [ ] Peep Cloud (freemium model)

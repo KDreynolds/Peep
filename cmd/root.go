@@ -46,4 +46,6 @@ func init() {
 	rootCmd.AddCommand(tuiCmd)
 	rootCmd.AddCommand(webCmd)
 	rootCmd.AddCommand(cleanCmd)
+	rootCmd.AddCommand(statsCmd)
+	rootCmd.AddCommand(daemonCmd)
 }

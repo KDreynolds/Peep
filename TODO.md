@@ -30,10 +30,29 @@
   - Index optimization for large datasets
   - WAL mode for concurrent access
 
-- [ ] **Monitoring & Stats**
+- [x] **Monitoring & Stats**
   - `peep stats` command (log count, size, oldest/newest)
   - Performance metrics for ingestion rate
   - Memory usage monitoring
+
+### 🚀 Service Deployment & Operations
+- [ ] **Daemon Mode**
+  - Background service mode (`peep daemon`)
+  - Auto-restart on crashes with exponential backoff
+  - Graceful shutdown handling (SIGTERM/SIGINT)
+  - Health check endpoints
+
+- [ ] **Resource Management**
+  - Memory usage limits and monitoring
+  - CPU usage monitoring and throttling
+  - Disk space monitoring and alerts
+  - Log rotation and archiving
+
+- [ ] **Deployment Packaging**
+  - Systemd service files
+  - Docker containers and docker-compose
+  - Kubernetes manifests and Helm charts
+  - Process supervision (supervisor, pm2)
 
 ## Current Sprint - HTTP Error Detection
 

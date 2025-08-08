@@ -20,7 +20,9 @@ type LogEntry struct {
 }
 
 type Storage struct {
-	db *sql.DB
+	db              *sql.DB
+	retentionMgr    *AutoRetentionManager
+	retentionConfig RetentionConfig
 }
 
 func NewStorage(dbPath string) (*Storage, error) {
@@ -114,10 +116,40 @@ func (s *Storage) GetLogs(limit int) ([]LogEntry, error) {
 }
 
 func (s *Storage) Close() error {
+	if s.retentionMgr != nil {
+		s.retentionMgr.Stop()
+	}
 	return s.db.Close()
 }
 
 // GetDB returns the underlying database connection for advanced operations
 func (s *Storage) GetDB() *sql.DB {
 	return s.db
+}
+
+// EnableAutoRetention starts automatic log retention with the given config
+func (s *Storage) EnableAutoRetention(config RetentionConfig) {
+	s.retentionConfig = config
+	s.retentionMgr = NewAutoRetentionManager(s, config)
+	s.retentionMgr.Start()
+}
+
+// DisableAutoRetention stops automatic log retention
+func (s *Storage) DisableAutoRetention() {
+	if s.retentionMgr != nil {
+		s.retentionMgr.Stop()
+		s.retentionMgr = nil
+	}
+}
+
+// GetRetentionConfig returns the current retention configuration
+func (s *Storage) GetRetentionConfig() RetentionConfig {
+	return s.retentionConfig
+}
+
+// TriggerRetentionCheck manually triggers a retention check
+func (s *Storage) TriggerRetentionCheck() {
+	if s.retentionMgr != nil {
+		s.retentionMgr.TriggerCleanupIfNeeded()
+	}
 }

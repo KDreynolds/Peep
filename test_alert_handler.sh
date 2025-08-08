@@ -1,0 +1,15 @@
+#!/bin/bash
+
+echo "🚨 PEEP ALERT TEST RECEIVED 🚨"
+echo "================================"
+echo "Title: $1"
+echo "Message: $2" 
+echo "Severity: $3"
+echo "Count: $4"
+echo "Threshold: $5"
+echo "Timestamp: $(date)"
+echo ""
+echo "Environment Variables:"
+env | grep PEEP_ | sort || echo "No PEEP environment variables found"
+echo ""
+echo "🎯 Shell notification test completed successfully!"

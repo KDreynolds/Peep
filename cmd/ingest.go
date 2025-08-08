@@ -70,6 +70,9 @@ Examples:
 				fmt.Printf(" (filtered %d)", filteredCount)
 			}
 			fmt.Println()
+
+			// Trigger retention check after ingestion
+			store.TriggerRetentionCheck()
 		} else {
 			// Read from file
 			filename := args[0]
@@ -108,6 +111,9 @@ Examples:
 				fmt.Printf(" (filtered %d)", filteredCount)
 			}
 			fmt.Println()
+
+			// Trigger retention check after ingestion
+			store.TriggerRetentionCheck()
 		}
 	},
 }
