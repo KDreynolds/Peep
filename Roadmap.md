@@ -52,14 +52,17 @@
 
 ### Phase 2: Intelligence (Weeks 3-4)
 **Week 3: Alerts & Notifications**
-- [x] SQL-based alert engine
-- [x] Alert rule configuration
-- [x] Notification channels:
-  - [x] Desktop notifications
-  - [x] Slack webhooks ⚠️ *Need to test with real Slack workspace*
-  - [x] Email notifications
-  - [x] Shell script execution
-- [ ] Basic dashboard views in TUI
+- [x] SQL-based alert engine with timezone-aware queries
+- [x] Alert rule configuration with time windows
+- [x] Alert suppression with cooldown periods (5-min default)
+- [x] Escalation detection for increasing error counts
+- [x] Notification channels (all tested in production):
+  - [x] Desktop notifications ✅ *Tested and working*
+  - [x] Slack webhooks ✅ *Tested with real Slack workspace*
+  - [x] Email notifications ✅ *SMTP integration working*
+  - [x] Shell script execution ✅ *Custom integrations working*
+- [x] Real-time alert monitoring with daemon mode
+- [x] HTTP status code monitoring (4xx, 5xx, 304 cache hits)
 
 **Week 4: Web Interface**
 - [x] Minimal web server (localhost:8080)
@@ -69,12 +72,17 @@
 - [x] Alert management UI
 
 **Week 4 Additional: Production Readiness**
-- [x] HTTP error detection alerts
-- [x] Log retention and cleanup commands
+- [x] HTTP error detection alerts (4xx, 5xx status codes)
+- [x] HTTP 304 cache hit monitoring for performance insights
+- [x] Log retention and cleanup commands with auto-vacuum
+- [x] Auto-retention system with configurable policies
 - [x] Ingestion filtering by log level
 - [x] Database maintenance utilities
-- [ ] Service deployment and daemon mode
-- [ ] Stats and monitoring commands
+- [x] Service deployment and daemon mode ✅ *Background monitoring active*
+- [x] Kubernetes integration with real-time log streaming
+- [x] Stats and monitoring commands
+- [x] Timezone-aware time window queries
+- [x] Alert suppression and escalation detection
 
 ### Phase 3: Polish & Launch (Weeks 5-6)
 **Week 5: Dogfooding & Feedback**
@@ -96,6 +104,8 @@
 ### Ingestion Sources
 - [x] stdin (`docker logs | peep`)
 - [x] File ingestion (`peep ingest app.log`)
+- [x] Kubernetes pod log streaming (`kubectl logs -f | peep ingest`)
+- [x] Real-time log tailing with automatic reconnection
 - [ ] HTTP endpoints for log pushing
 - [ ] Directory watching
 - [ ] Syslog integration
