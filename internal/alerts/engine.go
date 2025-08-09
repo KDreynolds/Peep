@@ -356,10 +356,75 @@ func (e *Engine) evaluateRule(rule *AlertRule) error {
 
 	// Check if threshold is exceeded
 	if count >= rule.Threshold {
+		// Check if we should suppress this alert (cooldown period)
+		if e.shouldSuppressAlert(rule, count) {
+			// Optional: log suppression for debugging
+			fmt.Printf("🔕 Alert suppressed: %s - Count: %d (cooldown active)\n", rule.Name, count)
+			return nil // Alert suppressed
+		}
 		return e.fireAlert(rule, count)
 	}
 
 	return nil
+}
+
+// shouldSuppressAlert determines if an alert should be suppressed based on cooldown period
+func (e *Engine) shouldSuppressAlert(rule *AlertRule, currentCount int) bool {
+	// Default cooldown period: don't send same alert more than once every 5 minutes
+	cooldownPeriod := 5 * time.Minute
+
+	// If no previous alert, don't suppress
+	if rule.LastAlert.IsZero() {
+		return false
+	}
+
+	// If last alert was recent, suppress
+	if time.Since(rule.LastAlert) < cooldownPeriod {
+		return true
+	}
+
+	// Check if the count has significantly changed (>20% increase)
+	// to allow alerts for escalating issues
+	lastInstance, err := e.getLastAlertInstance(rule.ID)
+	if err == nil && lastInstance != nil {
+		threshold := float64(lastInstance.Count) * 1.2 // 20% increase
+		if float64(currentCount) < threshold {
+			return true // Same level of alerts, suppress
+		}
+	}
+
+	return false // Allow alert
+}
+
+// getLastAlertInstance gets the most recent alert instance for a rule
+func (e *Engine) getLastAlertInstance(ruleID int64) (*AlertInstance, error) {
+	query := `
+	SELECT id, rule_id, rule_name, count, threshold, query, fired_at
+	FROM alert_instances 
+	WHERE rule_id = ? 
+	ORDER BY fired_at DESC 
+	LIMIT 1
+	`
+
+	var instance AlertInstance
+	err := e.db.QueryRow(query, ruleID).Scan(
+		&instance.ID,
+		&instance.RuleID,
+		&instance.RuleName,
+		&instance.Count,
+		&instance.Threshold,
+		&instance.Query,
+		&instance.FiredAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // No previous alerts
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &instance, nil
 }
 
 // buildTimeQuery adds time window constraints to the alert query
@@ -370,7 +435,9 @@ func (e *Engine) buildTimeQuery(query, window string) string {
 		duration = 5 * time.Minute // Default to 5 minutes
 	}
 
-	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
+	// Use local time with timezone offset to match the database timestamp format
+	localTime := time.Now().Local()
+	since := localTime.Add(-duration).Format("2006-01-02 15:04:05-07:00")
 
 	// Add time constraint to the query
 	if !containsWhere(query) {
