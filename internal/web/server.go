@@ -51,6 +51,9 @@ func (s *Server) Start(port int) error {
 	http.HandleFunc("/", s.handleDashboard)
 	http.HandleFunc("/logs", s.handleLogs)
 	http.HandleFunc("/logs/search", s.handleLogsSearch)
+	http.HandleFunc("/logs/stream", s.handleLogsStream)
+	http.HandleFunc("/query", s.handleQuery)
+	http.HandleFunc("/query/execute", s.handleQueryExecute)
 	http.HandleFunc("/alerts", s.handleAlerts)
 	http.HandleFunc("/alerts/rules", s.handleAlertRules)
 	http.HandleFunc("/alerts/rules/add", s.handleAddAlertRule)
@@ -284,6 +287,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 <nav>
                     <a href="/" class="active">Dashboard</a>
                     <a href="/logs">Logs</a>
+                    <a href="/query">Query</a>
                     <a href="/alerts">Alerts</a>
                 </nav>
             </div>
@@ -773,7 +777,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
         }
         
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 0 1rem;
         }
@@ -966,6 +970,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
                 <nav>
                     <a href="/">Dashboard</a>
                     <a href="/logs" class="active">Logs</a>
+                    <a href="/query">Query</a>
                     <a href="/alerts">Alerts</a>
                 </nav>
             </div>
@@ -1313,6 +1318,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
                 <nav>
                     <a href="/">Dashboard</a>
                     <a href="/logs">Logs</a>
+                    <a href="/query">Query</a>
                     <a href="/alerts" class="active">Alerts</a>
                 </nav>
             </div>
@@ -1630,6 +1636,7 @@ func (s *Server) handleAddAlertRule(w http.ResponseWriter, r *http.Request) {
                 <nav>
                     <a href="/">Dashboard</a>
                     <a href="/logs">Logs</a>
+                    <a href="/query">Query</a>
                     <a href="/alerts" class="active">Alerts</a>
                 </nav>
             </div>
@@ -2001,6 +2008,7 @@ func (s *Server) handleAddAlertChannel(w http.ResponseWriter, r *http.Request) {
                 <nav>
                     <a href="/">Dashboard</a>
                     <a href="/logs">Logs</a>
+                    <a href="/query">Query</a>
                     <a href="/alerts" class="active">Alerts</a>
                 </nav>
             </div>
@@ -2301,4 +2309,412 @@ func (s *Server) handleAddAlertChannel(w http.ResponseWriter, r *http.Request) {
 			✅ Notification channel created successfully! <a href="/alerts">View all channels</a>
 		</div>`))
 	}
+}
+
+// handleLogsStream provides real-time log streaming via Server-Sent Events
+func (s *Server) handleLogsStream(w http.ResponseWriter, r *http.Request) {
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Get the latest log ID to start streaming from
+	lastID := r.URL.Query().Get("lastId")
+	if lastID == "" {
+		lastID = "0"
+	}
+
+	// Send initial ping
+	fmt.Fprintf(w, "data: {\"type\":\"ping\"}\n\n")
+	w.(http.Flusher).Flush()
+
+	// TODO: Implement actual streaming - for now, just acknowledge the endpoint
+	fmt.Fprintf(w, "data: {\"type\":\"info\",\"message\":\"Stream endpoint ready\"}\n\n")
+	w.(http.Flusher).Flush()
+}
+
+// handleQuery shows the SQL query interface
+func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
+	tmpl := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Query Interface - Peep</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        header {
+            background: white;
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .tagline {
+            font-size: 0.875rem;
+            color: var(--gray-500);
+            margin-left: 0.5rem;
+        }
+        
+        nav {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        nav a {
+            color: var(--gray-700);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+        }
+        
+        nav a:hover, nav a.active {
+            background: var(--gray-100);
+            color: var(--primary);
+        }
+        
+        .query-container {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+        
+        .query-header {
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1rem;
+        }
+        
+        .query-header h2 {
+            margin-bottom: 0.5rem;
+        }
+        
+        .query-examples {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .example-query {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .example-query:hover {
+            background: #1d4ed8;
+        }
+        
+        .query-form {
+            padding: 1rem;
+        }
+        
+        .query-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 0.375rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.875rem;
+            resize: vertical;
+            margin-bottom: 1rem;
+        }
+        
+        .query-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+        
+        .results-container {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .results-header {
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1rem;
+        }
+        
+        .results-content {
+            padding: 1rem;
+        }
+        
+        .query-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        
+        .query-table th,
+        .query-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        
+        .query-table th {
+            background: var(--gray-50);
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+        
+        .query-table tr:hover {
+            background: var(--gray-50);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--gray-500);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div>
+                    <span class="logo">🔍 Peep</span>
+                    <span class="tagline">Observability for humans</span>
+                </div>
+                <nav>
+                    <a href="/">Dashboard</a>
+                    <a href="/logs">Logs</a>
+                    <a href="/query" class="active">Query</a>
+                    <a href="/alerts">Alerts</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="query-container">
+            <div class="query-header">
+                <h2>📊 SQL Query Interface</h2>
+                <p>Run SQL queries against your log data for custom analytics and insights.</p>
+                <div class="query-examples" style="margin-top: 1rem;">
+                    <button class="example-query" onclick="setQuery('SELECT COUNT(*) as total_logs FROM logs')">Total Logs</button>
+                    <button class="example-query" onclick="setQuery('SELECT level, COUNT(*) as count FROM logs GROUP BY level ORDER BY count DESC')">Logs by Level</button>
+                    <button class="example-query" onclick="setQuery('SELECT service, COUNT(*) as count FROM logs WHERE service IS NOT NULL GROUP BY service ORDER BY count DESC LIMIT 10')">Top Services</button>
+                    <button class="example-query" onclick="setQuery('SELECT DATE(timestamp) as date, COUNT(*) as logs FROM logs GROUP BY DATE(timestamp) ORDER BY date DESC LIMIT 7')">Daily Log Counts</button>
+                    <button class="example-query" onclick="setQuery('SELECT * FROM logs WHERE level = \'error\' ORDER BY timestamp DESC LIMIT 50')">Recent Errors</button>
+                    <button class="example-query" onclick="setQuery('SELECT COUNT(*) as http_errors FROM logs WHERE raw_log LIKE \'%\" 5__ %\' AND timestamp > datetime(\'now\', \'-1 hour\')')">HTTP 5xx Errors (1h)</button>
+                </div>
+            </div>
+            <div class="query-form">
+                <form hx-post="/query/execute" hx-target="#query-results" hx-indicator="#loading">
+                    <textarea name="query" id="query-input" class="query-textarea" placeholder="SELECT * FROM logs WHERE level = 'error' ORDER BY timestamp DESC LIMIT 10"></textarea>
+                    <div class="query-actions">
+                        <button type="submit" class="btn btn-primary">Execute Query</button>
+                        <span id="loading" class="htmx-indicator">⏳ Executing...</span>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="results-container">
+            <div class="results-header">
+                <h3>Query Results</h3>
+            </div>
+            <div class="results-content">
+                <div id="query-results" class="empty-state">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                    <h3>Ready to query</h3>
+                    <p>Enter a SQL query above and click "Execute Query" to see results.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setQuery(query) {
+            document.getElementById('query-input').value = query;
+        }
+    </script>
+</body>
+</html>`
+
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(tmpl))
+}
+
+// handleQueryExecute executes custom SQL queries
+func (s *Server) handleQueryExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.FormValue("query")
+	if query == "" {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<div class="empty-state">
+			<div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+			<h3>No query provided</h3>
+			<p>Please enter a SQL query to execute.</p>
+		</div>`))
+		return
+	}
+
+	// Execute the query
+	db := s.storage.GetDB()
+	rows, err := db.Query(query)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(fmt.Sprintf(`<div style="color: var(--danger); padding: 1rem; background: #fee2e2; border-radius: 0.375rem;">
+			❌ Query Error: %s
+		</div>`, err.Error())))
+		return
+	}
+	defer rows.Close()
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Prepare to scan results
+	var results [][]interface{}
+	for rows.Next() {
+		// Create a slice of interfaces to hold the values
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range columns {
+			valuePtrs[i] = &values[i]
+		}
+
+		// Scan the row
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+
+		// Convert to strings for display
+		row := make([]interface{}, len(columns))
+		for i, val := range values {
+			if val == nil {
+				row[i] = "NULL"
+			} else {
+				row[i] = fmt.Sprintf("%v", val)
+			}
+		}
+		results = append(results, row)
+	}
+
+	// Generate HTML table
+	if len(results) == 0 {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<div class="empty-state">
+			<div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+			<h3>No results</h3>
+			<p>The query executed successfully but returned no rows.</p>
+		</div>`))
+		return
+	}
+
+	html := `<div style="margin-bottom: 1rem; color: var(--success);">
+		✅ Query executed successfully - ` + fmt.Sprintf("%d", len(results)) + ` rows returned
+	</div>
+	<div style="overflow-x: auto;">
+		<table class="query-table">
+			<thead>
+				<tr>`
+
+	// Add column headers
+	for _, col := range columns {
+		html += fmt.Sprintf("<th>%s</th>", col)
+	}
+	html += "</tr></thead><tbody>"
+
+	// Add data rows
+	for _, row := range results {
+		html += "<tr>"
+		for _, val := range row {
+			html += fmt.Sprintf("<td>%v</td>", val)
+		}
+		html += "</tr>"
+	}
+
+	html += "</tbody></table></div>"
+
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(html))
 }
